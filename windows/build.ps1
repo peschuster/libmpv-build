@@ -74,13 +74,23 @@ $short = $head.Substring(0, 10)
 
 # mpv builds libmpv with library(), which follows default_library. That has to
 # stay "static" for the subprojects, so the DLL is asked for by name.
+#
+# vf_d3d11vpp.c, part of d3d-hwaccel, uses d3d11_helpers.c. mpv compiles that
+# file only with the D3D11 output, ANGLE or Vulkan, all of which are off here.
+$patches = @(
+    @{ Old = "libmpv = library('mpv',"; New = "libmpv = shared_library('mpv'," }
+    @{ Old = "'video/filter/vf_d3d11vpp.c')"
+       New = "'video/filter/vf_d3d11vpp.c', 'video/out/gpu/d3d11_helpers.c')`n" +
+             "    features += {'dxgi-debug-d3d11': cc.has_header_symbol('d3d11sdklayers.h', 'DXGI_DEBUG_D3D11')}" }
+)
 $mesonBuild = Join-Path $mpv "meson.build"
 $text = Get-Content $mesonBuild -Raw
-if ($text -match "libmpv = library\('mpv',") {
-    Set-Content $mesonBuild -Value ($text -replace "libmpv = library\('mpv',", "libmpv = shared_library('mpv',") -NoNewline
-} elseif ($text -notmatch "libmpv = shared_library\('mpv',") {
-    throw "meson.build of mpv has no libmpv = library('mpv', ...) line to patch"
+foreach ($patch in $patches) {
+    if ($text.Contains($patch.New)) { continue }
+    if (-not $text.Contains($patch.Old)) { throw "meson.build of mpv has no line to patch: $($patch.Old)" }
+    $text = $text.Replace($patch.Old, $patch.New)
 }
+Set-Content $mesonBuild -Value $text -NoNewline
 
 # ------------------------------------------------------------------------------
 # Subprojects. The four below come from git at the pinned revision; zlib,
@@ -116,13 +126,10 @@ try {
         if (-not (Test-Path "subprojects/$wrap.wrap")) { meson wrap install $wrap }
     }
 
-    # -Dc_args: with d3d11 off, mpv leaves HAVE_DXGI_DEBUG_D3D11 undefined, and
-    # vf_d3d11vpp.c then defines a GUID a second time that the Windows SDK has.
     if (-not (Test-Path "build/build.ninja")) {
         meson setup build `
             --wrap-mode=forcefallback `
             -Ddefault_library=static `
-            -Dc_args=-DHAVE_DXGI_DEBUG_D3D11=1 `
             -Dlibmpv=true `
             -Dcplayer=false `
             -Dgpl=false `
