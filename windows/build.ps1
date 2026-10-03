@@ -130,6 +130,7 @@ try {
         meson setup build `
             --wrap-mode=forcefallback `
             -Ddefault_library=static `
+            -Db_vscrt=mt `
             -Dlibmpv=true `
             -Dcplayer=false `
             -Dgpl=false `
@@ -234,6 +235,10 @@ if (-not $implib) { throw "No import library mpv.lib in $build" }
 $exports = @(dumpbin /nologo /exports $dll.FullName | Select-String '\smpv_[a-z0-9_]+\s*$')
 if ($exports.Count -lt 20) { throw "Only $($exports.Count) mpv_ exports in $($dll.Name)" }
 $imports = @(dumpbin /nologo /dependents $dll.FullName | Select-String '^\s+\S+\.dll\s*$' | ForEach-Object { $_.Line.Trim() })
+
+# The C runtime has to be inside the DLL, a site PC has no Visual C++ redistributable
+$runtime = @($imports | Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|api-ms-win-crt)' })
+if ($runtime.Count -gt 0) { throw "$($dll.Name) loads the C runtime as DLLs: $($runtime -join ', ')" }
 
 # FFmpeg states its licence in the generated config.h
 $ffLicence = Get-ChildItem (Join-Path $build "subprojects") -Recurse -Filter config.h |

@@ -20,6 +20,7 @@ It also leaves out what a player with its own window does not use, which keeps t
 | libplacebo | `sources.json` | LGPL 2.1 or later |
 | dav1d | `sources.json` | BSD 2-clause |
 | harfbuzz, freetype, fribidi, zlib | Meson WrapDB | MIT, FreeType licence, LGPL 2.1 or later, zlib |
+| win-iconv, dlfcn-win32 | Meson WrapDB, pulled in by the above | public domain, MIT |
 
 In: all of FFmpeg's own decoders and demuxers, HTTP and HTTPS (through Windows' Schannel), the OpenGL render API, WASAPI, D3D11VA and DXVA2 hardware decoding.
 
@@ -52,7 +53,7 @@ The first run clones into `work\` and takes a while. The packages go to `out\`.
 
 ## Change a version
 
-Edit the revision in `sources.json` and push. The four WrapDB libraries are not pinned yet. They come in the version WrapDB has on the day of the build, and `BUILD-INFO.txt` records which one that was.
+Edit the revision in `sources.json` and push. The WrapDB libraries are not pinned yet. They come in the version WrapDB has on the day of the build, and `BUILD-INFO.txt` records which one that was.
 
 ## Licence
 
