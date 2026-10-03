@@ -1,0 +1,22 @@
+{
+  "mpv": {
+    "url": "https://github.com/mpv-player/mpv",
+    "revision": "e470f8986e7d544c7ccf526e987b9f869f0b5904"
+  },
+  "ffmpeg": {
+    "url": "https://gitlab.freedesktop.org/gstreamer/meson-ports/ffmpeg.git",
+    "revision": "0a41ed7bbaeddd764d213f7e16e9a5a5d09e6999"
+  },
+  "libass": {
+    "url": "https://github.com/libass/libass",
+    "revision": "f61db567e6593df3470e91594bcd4ad2d0473aff"
+  },
+  "libplacebo": {
+    "url": "https://code.videolan.org/videolan/libplacebo.git",
+    "revision": "92b5ac6db79f4d680eb656692f7bf51e9606f42a"
+  },
+  "dav1d": {
+    "url": "https://code.videolan.org/videolan/dav1d.git",
+    "revision": "1.5.4"
+  }
+}

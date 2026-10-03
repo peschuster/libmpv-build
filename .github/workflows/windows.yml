@@ -1,0 +1,61 @@
+name: Windows
+
+# A push to main builds and keeps the packages as an artifact. A tag build-*
+# also makes a release from them, which is what a consumer pins.
+on:
+  push:
+    branches: [main]
+    tags: ['build-*']
+    paths-ignore: ['**.md', 'LICENSE']
+  workflow_dispatch:
+
+jobs:
+  x64:
+    runs-on: windows-2025
+    permissions:
+      contents: write
+
+    steps:
+      # mpv and the subprojects want their files with LF
+      - name: Disable autocrlf
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v5
+
+      - name: Install Meson and NASM
+        run: |
+          python -m pip install meson
+          winget install --accept-source-agreements --accept-package-agreements NASM.NASM
+          echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
+
+      - name: Build
+        id: build
+        shell: pwsh
+        run: ./windows/build.ps1
+
+      - name: Print Meson log
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
+        shell: pwsh
+        run: |
+          $log = "work/mpv/build/meson-logs/meson-log.txt"
+          if (Test-Path $log) { Get-Content $log -Tail 300 }
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: libmpv-windows-x64
+          path: |
+            out/*.zip
+            out/*.tar.gz
+          retention-days: 14
+
+      - name: Create release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem out -File | Where-Object { $_.Name -match '\.(zip|tar\.gz)$' }
+          $info = (Get-ChildItem out -Recurse -Filter BUILD-INFO.txt | Select-Object -First 1).FullName
+          gh release create "${{ github.ref_name }}" $files.FullName --title "${{ github.ref_name }}" --notes-file $info
