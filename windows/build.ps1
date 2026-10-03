@@ -116,10 +116,13 @@ try {
         if (-not (Test-Path "subprojects/$wrap.wrap")) { meson wrap install $wrap }
     }
 
+    # -Dc_args: with d3d11 off, mpv leaves HAVE_DXGI_DEBUG_D3D11 undefined, and
+    # vf_d3d11vpp.c then defines a GUID a second time that the Windows SDK has.
     if (-not (Test-Path "build/build.ninja")) {
         meson setup build `
             --wrap-mode=forcefallback `
             -Ddefault_library=static `
+            -Dc_args=-DHAVE_DXGI_DEBUG_D3D11=1 `
             -Dlibmpv=true `
             -Dcplayer=false `
             -Dgpl=false `
@@ -131,6 +134,7 @@ try {
             -Dffmpeg:nonfree=disabled `
             -Dffmpeg:tests=disabled `
             -Dffmpeg:programs=disabled `
+            -Dffmpeg:checkasm=disabled `
             -Dffmpeg:avdevice=disabled `
             -Dffmpeg:postproc=disabled `
             -Dffmpeg:sdl2=disabled `
@@ -203,7 +207,9 @@ try {
             -Dwayland=disabled `
             -Dx11=disabled
     }
-    ninja -C build
+    # Only the DLL. The default target would also build test programs and
+    # libraries of the subprojects that nothing links.
+    meson compile -C build mpv
 } finally {
     Pop-Location
 }
@@ -240,7 +246,7 @@ New-Item -ItemType Directory -Force "$pkg\include\mpv", "$pkg\LICENSES" | Out-Nu
 Copy-Item $dll.FullName, $implib.FullName $pkg
 Copy-Item (Join-Path $mpv "include\mpv\*.h") "$pkg\include\mpv"
 
-# Licence files of mpv and of every subproject that was fetched
+# Licence files of mpv and of every subproject linked into the DLL
 function Copy-Licences([string]$From, [string]$Name) {
     $files = @(Get-ChildItem $From -File | Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|COPYRIGHT|Copyright|NOTICE|AUTHORS)' })
     if ($files.Count -eq 0) {
@@ -254,7 +260,12 @@ function Copy-Licences([string]$From, [string]$Name) {
 $noLicence = @()
 Copy-Licences $mpv "mpv"
 $sources = @("mpv  $($pins.mpv.url)  $head")
-foreach ($dir in Get-ChildItem $subprojects -Directory | Where-Object { $_.Name -ne "packagefiles" }) {
+# Only subprojects with an object or library among the inputs of the DLL
+$linked = @(ninja -C $build -t inputs $dll.Name |
+    Select-String '^subprojects[\/]([^\/]+)[\/].*\.(a|lib|obj|o)$' |
+    ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique)
+if ($linked.Count -lt 5) { throw "Only $($linked.Count) subprojects among the inputs of $($dll.Name): $($linked -join ', ')" }
+foreach ($dir in Get-ChildItem $subprojects -Directory | Where-Object { $linked -contains $_.Name }) {
     Copy-Licences $dir.FullName $dir.Name
     if (Test-Path (Join-Path $dir.FullName ".git")) {
         $url = git -C $dir.FullName remote get-url origin
