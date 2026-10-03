@@ -260,7 +260,13 @@ Copy-Item (Join-Path $mpv "include\mpv\*.h") "$pkg\include\mpv"
 
 # Licence files of mpv and of every subproject linked into the DLL
 function Copy-Licences([string]$From, [string]$Name) {
-    $files = @(Get-ChildItem $From -File | Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|COPYRIGHT|Copyright|NOTICE|AUTHORS)' })
+    # Without the GPL and LGPL 3 texts that mpv and FFmpeg carry for their other
+    # configurations. This build uses neither, and LICENSE.build is the licence
+    # of WrapDB's build files, not of the library.
+    $files = @(Get-ChildItem $From -File | Where-Object {
+            $_.Name -match '^(LICEN[CS]E|COPYING|COPYRIGHT|Copyright|NOTICE|AUTHORS)' -and
+            $_.Name -notmatch '^(COPYING\.(GPLv2|GPLv3|LGPLv3)|LICENSE\.GPL|LICENSE\.build)$'
+        })
     if ($files.Count -eq 0) {
         Write-Warning "No licence file found for $Name in $From"
         $script:noLicence += $Name
@@ -279,6 +285,9 @@ $linked = @(ninja -C $build -t inputs $dll.Name |
 if ($linked.Count -lt 5) { throw "Only $($linked.Count) subprojects among the inputs of $($dll.Name): $($linked -join ', ')" }
 foreach ($dir in Get-ChildItem $subprojects -Directory | Where-Object { $linked -contains $_.Name }) {
     Copy-Licences $dir.FullName $dir.Name
+    # FreeType's LICENSE.TXT only points to the text in docs\
+    $ftl = Join-Path $dir.FullName "docs\FTL.TXT"
+    if (Test-Path $ftl) { Copy-Item $ftl "$pkg\LICENSES\$($dir.Name)" }
     if (Test-Path (Join-Path $dir.FullName ".git")) {
         $url = git -C $dir.FullName remote get-url origin
         $rev = git -C $dir.FullName rev-parse HEAD
