@@ -1,0 +1,99 @@
+name: macOS
+
+# A push to main builds and keeps the packages as an artifact. A tag build-*
+# also puts them into the release of that tag, which is what a consumer pins.
+on:
+  push:
+    branches: [main]
+    tags: ['build-*']
+    paths-ignore: ['**.md', 'LICENSE', 'windows/build.ps1', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+jobs:
+  # One build per architecture, each on a Mac of that architecture, so nothing
+  # is cross-compiled.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Meson, Ninja and NASM
+        run: brew install meson ninja nasm
+
+      - name: Build
+        id: build
+        run: ./macos/build.sh
+
+      - name: Print Meson log
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
+        run: |
+          log=work/mpv/build/meson-logs/meson-log.txt
+          if [ -f "$log" ]; then tail -300 "$log"; fi
+
+      # tar keeps the layout and the signature of the library
+      - name: Pack
+        run: |
+          cd out
+          tar -cf package-${{ matrix.arch }}.tar libmpv-*-macos-${{ matrix.arch }}
+          ls -l
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: thin-${{ matrix.arch }}
+          path: |
+            out/package-${{ matrix.arch }}.tar
+            out/*-sources.tar.gz
+          retention-days: 3
+
+  universal:
+    needs: build
+    runs-on: macos-15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: thin
+
+      - name: Join
+        run: |
+          mkdir -p out
+          tar -xf thin/thin-arm64/package-arm64.tar -C thin
+          tar -xf thin/thin-x86_64/package-x86_64.tar -C thin
+          ./macos/universal.sh thin/libmpv-*-macos-arm64 thin/libmpv-*-macos-x86_64
+          # Both builds use the same sources
+          src=(thin/thin-arm64/*-sources.tar.gz)
+          cp "${src[0]}" "out/$(basename "${src[0]}" | sed 's/-macos-arm64-/-macos-universal-/')"
+          rm -rf out/libmpv-*-macos-universal
+          ls -l out
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libmpv-macos-universal
+          path: |
+            out/*.zip
+            out/*.tar.gz
+          retention-days: 14
+
+      # The Windows workflow puts its files into the same release. Whichever
+      # comes first creates it.
+      - name: Add to the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "libmpv, LGPL build. BUILD-INFO.txt in each package lists what is inside." || true
+          gh release upload "$tag" out/*.zip out/*.tar.gz --clobber
