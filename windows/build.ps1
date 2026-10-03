@@ -269,7 +269,7 @@ Copy-Licences $mpv "mpv"
 $sources = @("mpv  $($pins.mpv.url)  $head")
 # Only subprojects with an object or library among the inputs of the DLL
 $linked = @(ninja -C $build -t inputs $dll.Name |
-    Select-String '^subprojects[\/]([^\/]+)[\/].*\.(a|lib|obj|o)$' |
+    Select-String '^subprojects[\\/]([^\\/]+)[\\/].*\.(a|lib|obj|o)$' |
     ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique)
 if ($linked.Count -lt 5) { throw "Only $($linked.Count) subprojects among the inputs of $($dll.Name): $($linked -join ', ')" }
 foreach ($dir in Get-ChildItem $subprojects -Directory | Where-Object { $linked -contains $_.Name }) {
