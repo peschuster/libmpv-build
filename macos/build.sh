@@ -10,6 +10,8 @@
 #   - no Cocoa and no Swift. libmpv then has no window code of its own, which
 #     a player with its own window does not use, and OpenGL comes in through
 #     mpv's plain-gl, the backend for the render API.
+#   - the linker refuses undefined symbols (b_lundef), which mpv's own build
+#     allows. One that is missing would otherwise show only when it is called.
 #   - CoreAudio for sound, VideoToolbox for hardware decoding. Without mpv's
 #     Cocoa OpenGL backend the decoded frames are copied (hwdec=videotoolbox-copy,
 #     which auto-copy-safe picks); there is no zero-copy path.
@@ -61,17 +63,34 @@ if [ "$head" != "$revision" ]; then
 fi
 short="${head:0:10}"
 
+# Two patches to mpv's meson.build.
+#
 # mpv builds libmpv with library(), which follows default_library. That has to
 # stay "static" for the subprojects, so the shared library is asked for by name.
+#
+# osdep/utils-mac.c has the CFString helpers that the CoreAudio output uses.
+# mpv compiles it only with Cocoa, which is off here. Without it the library
+# still links, because mpv allows undefined symbols, and then calls address 0
+# as soon as it lists the audio devices.
 python3 - "$mpv/meson.build" <<'EOF'
 import sys
 path = sys.argv[1]
 text = open(path).read()
-old, new = "libmpv = library('mpv',", "libmpv = shared_library('mpv',"
-if new not in text:
+patches = [
+    ("libmpv = library('mpv',", "libmpv = shared_library('mpv',"),
+    ("    sources += files('osdep/language-posix.c')\n",
+     "    sources += files('osdep/language-posix.c')\n"
+     "    if darwin\n"
+     "        sources += files('osdep/utils-mac.c')\n"
+     "    endif\n"),
+]
+for old, new in patches:
+    if new in text:
+        continue
     if old not in text:
         sys.exit("meson.build of mpv has no line to patch: " + old)
-    open(path, "w").write(text.replace(old, new))
+    text = text.replace(old, new, 1)
+open(path, "w").write(text)
 EOF
 
 # ------------------------------------------------------------------------------
@@ -112,6 +131,7 @@ if [ ! -f build/build.ninja ]; then
     meson setup build \
         --wrap-mode=forcefallback \
         --buildtype=release \
+        -Db_lundef=true \
         -Ddefault_library=static \
         -Dlibmpv=true \
         -Dcplayer=false \
