@@ -22,7 +22,7 @@ jobs:
           git config --global core.autocrlf false
           git config --global core.eol lf
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Meson and NASM
         run: |
@@ -42,7 +42,7 @@ jobs:
           $log = "work/mpv/build/meson-logs/meson-log.txt"
           if (Test-Path $log) { Get-Content $log -Tail 300 }
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: libmpv-windows-x64
           path: |
